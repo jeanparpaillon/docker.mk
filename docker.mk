@@ -89,6 +89,7 @@ stacks/Makefile:
 #
 ifeq ($(PWD),$(basedir))
 all-root: | hosts/Makefile stacks/Makefile
+	@cd hosts && $(MAKE) --no-print-directory
 endif
 #
 # END: root
@@ -98,7 +99,21 @@ endif
 # BEGIN: hosts
 #
 ifeq ($(PWD),$(basedir)/hosts)
-all-hosts:
+
+define host_mk
+include ../../docker.mk
+endef
+
+hosts=$(filter-out $(firstword $(MAKEFILE_LIST)),$(wildcard *))
+hosts_mk=$(patsubst %,%/Makefile,$(hosts))
+
+all-hosts: | $(hosts_mk)
+	@for host in $(hosts); do \
+	  cd $$host && $(MAKE) --no-print-directory; \
+	done
+
+%/Makefile:
+	$(call gen,$@,$(call host_mk))
 endif
 #
 # END: hosts
@@ -108,7 +123,21 @@ endif
 # BEGIN: stacks
 #
 ifeq ($(PWD),$(basedir)/stacks)
-all-stacks:
+
+define stack_mk
+include ../../docker.mk
+endef
+
+stacks=$(filter-out $(firstword $(MAKEFILE_LIST)),$(wildcard *))
+stacks_mk=$(patsubst %,%/Makefile,$(stacks))
+
+all-stacks: | $(stacks_mk)
+	@for stack in $(stacks); do \
+	  cd $$stack && $(MAKE) --no-print-directory; \
+	done
+
+%/Makefile:
+	$(call gen,$@,$(call stack_mk))
 endif
 #
 # END: stacks
