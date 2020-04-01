@@ -120,6 +120,14 @@ Specific variables and hooks are described in the following sections.
   up.
   * _Example_: `networks=nginx-proxy`
 
+For each network, you can provide custom options providing
+`network_NETWORK_NAME_opts` variable. For instance:
+
+```make
+networks=nginx-proxy
+network_nginx-proxy_opts=--attachable
+```
+
 ## Hooks
 
 * `stack-pre-up`: executed before bringing stack up

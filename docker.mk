@@ -208,11 +208,18 @@ ifeq ($(dir $(PWD)),$(basedir)/stacks/)
 stack=$(notdir $(PWD))
 networks?=
 
-define stack-net-up
+define stack-net
 stack-net-$(1)-up:
 	$(gen_v)if [ -z "$$$$(docker network ls -f name=$(1) --format '{{ .ID }}')" ]; then \
-	  docker network create $(1); \
+	  docker network create $(network_$(1)_opts) $(1); \
 	fi
+
+stack-net-$(1)-down:
+	$(gen_v)if [ -n "$$$$(docker network ls -f name=$(1) --format '{{ .ID }}')" ]; then \
+	  docker network rm $(1); \
+	fi
+
+.PHONY: stack-net-$(1)-up stack-net-$(1)-down
 endef
 
 all-stack: stack-pre-up
@@ -223,17 +230,21 @@ stack-down: stack-pre-down
 	$(info) "DOWN" $(stack); docker-compose down
 	$(MAKE) stack-post-down
 
-stack-pre-up: $(foreach net,$(networks), stack-net-$(net)-up)
+stack-pre-up: stack-net-up
 
 stack-post-up:
 
-$(foreach net,$(networks),$(eval $(call stack-net-up,$(net))))
+$(foreach net,$(networks),$(eval $(call stack-net,$(net))))
 
 stack-pre-down:
 
 stack-post-down:
 
-.PHONY: all-stack stack-pre-up stack-post-up stack-pre-down stack-post-down
+stack-net-up: $(foreach net,$(networks), stack-net-$(net)-up)
+
+stack-net-down: $(foreach net,$(networks), stack-net-$(net)-down)
+
+.PHONY: all-stack stack-pre-up stack-post-up stack-pre-down stack-post-down stack-net-up stack-net-down
 endif
 #
 # END: stack
