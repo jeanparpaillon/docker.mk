@@ -35,6 +35,8 @@ info_1=:
 #
 .DEFAULT_GOAL=all
 
+all:
+
 ifeq ($(firstword $(MAKEFILE_LIST)),docker.mk)
 all: bootstrap
 else ifeq ($(PWD),$(basedir))
@@ -43,7 +45,13 @@ else ifeq ($(PWD),$(basedir)/stacks)
 all: all-stacks
 else ifeq ($(PWD),$(basedir)/hosts)
 all: all-hosts
+else ifeq ($(dir $(PWD)),$(basedir)/hosts/)
+all: all-host
+else ifeq ($(dir $(PWD)),$(basedir)/stacks/)
+all: all-stack
 endif
+
+.PHONY: all
 
 define gen
 @mkdir -p $(dir $1)
@@ -66,7 +74,7 @@ define hosts_mk
 include ../docker.mk
 endef
 
-define stacks
+define stacks_mk
 include ../docker.mk
 endef
 
@@ -80,6 +88,8 @@ hosts/Makefile:
 
 stacks/Makefile:
 	$(call gen,$@,$(call stacks_mk))
+
+.PHONY: bootstrap
 #
 # END: bootstrap
 #
@@ -90,6 +100,8 @@ stacks/Makefile:
 ifeq ($(PWD),$(basedir))
 all-root: | hosts/Makefile stacks/Makefile
 	@cd hosts && $(MAKE) --no-print-directory
+
+.PHONY: all-root
 endif
 #
 # END: root
@@ -100,23 +112,58 @@ endif
 #
 ifeq ($(PWD),$(basedir)/hosts)
 
+HOST?=
+
 define host_mk
 include ../../docker.mk
 endef
 
-hosts=$(filter-out $(firstword $(MAKEFILE_LIST)),$(wildcard *))
+hosts=$(eval hosts := $$(shell find . -mindepth 1 -maxdepth 1 -type d -exec basename {} \;))$(hosts)
 hosts_mk=$(patsubst %,%/Makefile,$(hosts))
 
 all-hosts: | $(hosts_mk)
 	@for host in $(hosts); do \
-	  cd $$host && $(MAKE) --no-print-directory; \
+	  (cd $$stack && $(MAKE) --no-print-directory); \
 	done
+
+ifeq ($(HOST),)
+new-host:
+	@echo "Missing variable: HOST"; false
+else
+new-host: $(HOST)/Makefile
+endif
 
 %/Makefile:
 	$(call gen,$@,$(call host_mk))
+
+.PHONY: all-hosts new-host
 endif
 #
 # END: hosts
+#
+
+#
+# BEGIN: host
+#
+ifeq ($(dir $(PWD)),$(basedir)/hosts/)
+host=$(notdir $(PWD))
+stacks=$(eval stacks := $$(shell find . -maxdepth 1 -type l -lname '**/stacks/*' -exec basename {} \;))$(stacks)
+
+all-host: host-sync
+	$(info) "UPDATE" $(host); for stack in $(stacks); do \
+	  ssh $(host) "cd $(remotedir)/stacks/$${stack} && $(MAKE)"; \
+	done
+
+host-sync: host-pre-sync
+	$(info) "SYNC" $(host); \
+	  rsync -aq --exclude='.git' --exclude='.history' $(basedir)/ $(host):$(remotedir)
+
+host-pre-sync:
+
+.PHONY: all-host host-sync host-pre-sync
+endif
+#
+# END: host
 #
 
 #
@@ -124,26 +171,70 @@ endif
 #
 ifeq ($(PWD),$(basedir)/stacks)
 
+STACK?=
+
 define stack_mk
 include ../../docker.mk
 endef
 
-stacks=$(filter-out $(firstword $(MAKEFILE_LIST)),$(wildcard *))
+stacks=$(eval stacks := $$(shell find . -mindepth 1 -maxdepth 1 -type d -exec basename {} \;))$(stacks)
 stacks_mk=$(patsubst %,%/Makefile,$(stacks))
 
 all-stacks: | $(stacks_mk)
 	@for stack in $(stacks); do \
-	  cd $$stack && $(MAKE) --no-print-directory; \
+	  (cd $$stack && $(MAKE) --no-print-directory); \
 	done
+
+ifeq ($(STACK),)
+new-stack:
+	@echo "Missing variable: STACK"; false
+else
+new-stack: $(STACK)/Makefile
+endif
 
 %/Makefile:
 	$(call gen,$@,$(call stack_mk))
+
+.PHONY: all-stacks new-stack
 endif
 #
 # END: stacks
 #
 
-help: ## This help
-	@grep -E '^[^: ]+:.*?## .*$$' $(MAKEFILE_LIST) | awk 'BEGIN {FS = ":[^:]*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
+#
+# BEGIN: stack
+#
+ifeq ($(dir $(PWD)),$(basedir)/stacks/)
+stack=$(notdir $(PWD))
+networks?=
 
-.PHONY: all all-root all-stacks all-hosts help bootstrap
+define stack-net-up
+stack-net-$(1)-up:
+	$(gen_v)if [ -z "$$$$(docker network ls -f name=$(1) --format '{{ .ID }}')" ]; then \
+	  docker network create $(1); \
+	fi
+endef
+
+all-stack: stack-pre-up
+	$(info) "UP" $(stack); docker-compose up -d
+	$(MAKE) stack-post-up
+
+stack-down: stack-pre-down
+	$(info) "DOWN" $(stack); docker-compose down
+	$(MAKE) stack-post-down
+
+stack-pre-up: $(foreach net,$(networks), stack-net-$(net)-up)
+
+stack-post-up:
+
+$(foreach net,$(networks),$(eval $(call stack-net-up,$(net))))
+
+stack-pre-down:
+
+stack-post-down:
+
+.PHONY: all-stack stack-pre-up stack-post-up stack-pre-down stack-post-down
+endif
+#
+# END: stack
+#
