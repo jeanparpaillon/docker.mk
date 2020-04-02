@@ -11,6 +11,17 @@
 #
 basedir=$(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 remotedir=/opt/docker.mk
+
+esh=$(basedir)/tools/esh
+
+%: %.esh $(esh)
+	$(info) "GEN" "$@"; \
+	  $(esh) $< > $@
+
+esh_src=https://github.com/jirutka/esh/raw/v0.3.0/esh
+$(esh):
+	$(info) "FETCH" "esh"; \
+	  mkdir -p $(@D) && wget -q -O $@ $(esh_src) && chmod 755 $@
 #
 # END: global
 #
@@ -78,7 +89,7 @@ define stacks_mk
 include ../docker.mk
 endef
 
-bootstrap: Makefile hosts/Makefile stacks/Makefile
+bootstrap: Makefile hosts/Makefile stacks/Makefile $(prereqs)
 
 Makefile:
 	$(call gen,$@,$(call root_mk))
@@ -230,13 +241,13 @@ stack-down: stack-pre-down
 	$(info) "DOWN" $(stack); docker-compose down
 	$(MAKE) stack-post-down
 
-stack-pre-up: stack-net-up
+stack-pre-up: stack-net-up docker-compose.yml
 
 stack-post-up:
 
 $(foreach net,$(networks),$(eval $(call stack-net,$(net))))
 
-stack-pre-down:
+stack-pre-down: docker-compose.yml
 
 stack-post-down:
 

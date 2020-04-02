@@ -135,6 +135,37 @@ network_nginx-proxy_opts=--attachable
 * `stack-pre-down`: executed before bringing stack down
 * `stack-post-down`: executed after bringing the stack down
 
+## Templates
+
+docker.mk includes the [esh](https://github.com/jirutka/esh) template engine.
+Just suffix a file name with `.esh` for _esh_ to be used.
+
+* _WARNING_: _esh_ will complain if a variable used in the template is not
+  defined and has no default value. You can use the shell syntax for providing
+  default value: `${MYVAR:-DEFAULT_VALUE}`.
+
+## Example
+
+* `docker-compose.yml.esh`
+
+```
+version: "3.3"
+
+services:
+    proxy:
+        image: jwilder/nginx-proxy
+        ports:
+            - "80:80"
+            <% if test "${ssl:-0}" = "1"; then -%>- "443:443"<% fi -%>
+        volumes:
+            - /var/run/docker.sock:/tmp/docker.sock:ro
+
+    whoami:
+        image: jwilder/whoami
+        environment:
+            - VIRTUAL_HOST=whoami.local
+```
+
 # Host customization
 
 ## Hooks
