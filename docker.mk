@@ -13,15 +13,25 @@ basedir=$(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 remotedir=/opt/docker.mk
 
 esh=$(basedir)/tools/esh
-
-%: %.esh $(esh)
-	$(info) "GEN" "$@"; \
-	  $(esh) $< > $@
-
 esh_src=https://github.com/jirutka/esh/raw/v0.3.0/esh
+
+%: %.esh %.esh.env | $(esh)
+	$(info_v) "GEN" "$@"; $(esh) $< > $@
+
+%.esh.env: environment
+	$(gen_v)printenv > $@.tmp; \
+	if ! diff -q $@ $@.tmp > /dev/null 2>&1; then \
+	  $(info) "ENV" "$*"; \
+	  cp $@.tmp $@; \
+	fi
+	@rm -f $@.tmp
+
 $(esh):
-	$(info) "FETCH" "esh"; \
+	$(info_v) "FETCH" "esh"; \
 	  mkdir -p $(@D) && wget -q -O $@ $(esh_src) && chmod 755 $@
+
+.SECONDARY:
+.PHONY: environment
 #
 # END: global
 #
@@ -34,9 +44,11 @@ V=0
 gen_v=$(gen_v_$(V))
 gen_v_0=@
 
-info=$(info_$(V))
-info_0=@sh -c 'printf "\033[33m %-7s\033[0m%s\n" $$1 $$2' info
-info_1=:
+info=sh -c 'printf "\033[33m %-7s\033[0m%s\n" $$1 $$2' info
+
+info_v=$(info_v_$(V))
+info_v_0=@$(info)
+info_v_1=:
 #
 # END: logging
 #
@@ -66,7 +78,7 @@ endif
 
 define gen
 @mkdir -p $(dir $1)
-$(info) "GEN" $1; \
+$(info_v) "GEN" $1; \
   echo "# Generated on $$(date +'%F %T %Z')" > $1; \
   echo "$2" >> $1
 endef
@@ -161,12 +173,12 @@ host=$(notdir $(PWD))
 stacks=$(eval stacks := $$(shell find . -maxdepth 1 -type l -lname '**/stacks/*' -exec basename {} \;))$(stacks)
 
 all-host: host-sync
-	$(info) "UPDATE" $(host); for stack in $(stacks); do \
+	$(info_v) "UPDATE" $(host); for stack in $(stacks); do \
 	  ssh $(host) "cd $(remotedir)/stacks/$${stack} && $(MAKE)"; \
 	done
 
 host-sync: host-pre-sync
-	$(info) "SYNC" $(host); \
+	$(info_v) "SYNC" $(host); \
 	  rsync -aq --exclude='.git' --exclude='.history' $(basedir)/ $(host):$(remotedir)
 
 host-pre-sync:
@@ -234,11 +246,11 @@ stack-net-$(1)-down:
 endef
 
 all-stack: stack-pre-up
-	$(info) "UP" $(stack); docker-compose up -d
+	$(info_v) "UP" $(stack); docker-compose up -d
 	$(MAKE) stack-post-up
 
 stack-down: stack-pre-down
-	$(info) "DOWN" $(stack); docker-compose down
+	$(info_v) "DOWN" $(stack); docker-compose down
 	$(MAKE) stack-post-down
 
 stack-pre-up: stack-net-up docker-compose.yml
