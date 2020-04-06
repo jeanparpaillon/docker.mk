@@ -9,6 +9,9 @@
 #
 # BEGIN: global
 #
+.SECONDARY:
+.EXPORT_ALL_VARIABLES:
+
 basedir=$(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 remotedir=/opt/docker.mk
 
@@ -30,7 +33,6 @@ $(esh):
 	$(info_v) "FETCH" "esh"; \
 	  mkdir -p $(@D) && wget -q -O $@ $(esh_src) && chmod 755 $@
 
-.SECONDARY:
 .PHONY: environment
 #
 # END: global
@@ -171,11 +173,18 @@ endif
 ifeq ($(dir $(PWD)),$(basedir)/hosts/)
 host=$(notdir $(PWD))
 stacks=$(eval stacks := $$(shell find . -maxdepth 1 -type l -lname '**/stacks/*' -exec basename {} \;))$(stacks)
+host_remote?=0
 
+ifeq ($(host_remote),0)
 all-host: host-sync
+	$(info_v) "SSH" $(host); \
+	  ssh $(host) "cd $(remotedir)/hosts/$(host) && $(MAKE) host_remote=1"
+else
+all-host:
 	$(info_v) "UPDATE" $(host); for stack in $(stacks); do \
-	  ssh $(host) "cd $(remotedir)/stacks/$${stack} && $(MAKE)"; \
+	  cd $(remotedir)/stacks/$${stack} && $(MAKE); \
 	done
+endif
 
 host-sync: host-pre-sync
 	$(info_v) "SYNC" $(host); \
