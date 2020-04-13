@@ -182,13 +182,13 @@ all-host: host-sync
 else
 all-host:
 	$(info_v) "UPDATE" $(host); for stack in $(stacks); do \
-	  cd $(remotedir)/stacks/$${stack} && $(MAKE); \
+	  (cd $(remotedir)/stacks/$${stack} && $(MAKE)); \
 	done
 endif
 
 host-sync: host-pre-sync
 	$(info_v) "SYNC" $(host); \
-	  rsync -aq --exclude='.git' --exclude='.history' $(basedir)/ $(host):$(remotedir)
+	  rsync -aq --delete --exclude='.git' --exclude='.history' $(basedir)/ $(host):$(remotedir)
 
 host-pre-sync:
 
@@ -239,6 +239,7 @@ endif
 ifeq ($(dir $(PWD)),$(basedir)/stacks/)
 stack=$(notdir $(PWD))
 networks?=
+swarm=$(eval swarm := $$(shell docker info --format '{{ .Swarm.LocalNodeState }}'))$(swarm)
 
 define stack-net
 stack-net-$(1)-up:
@@ -254,19 +255,28 @@ stack-net-$(1)-down:
 .PHONY: stack-net-$(1)-up stack-net-$(1)-down
 endef
 
-all-stack: stack-pre-up
+all-stack: stack-up
+
+ifeq ($(swarm),active)
+stack-up: stack-pre-up
+	$(info_v) "UP" $(stack); docker stack deploy -c docker-compose.yml --prune $(stack)
+	$(MAKE) stack-post-up
+
+stack-down: stack-pre-down
+	$(info_v) "DOWN" $(stack); docker stack rm $(stack)
+else
+stack-up: stack-pre-up
 	$(info_v) "UP" $(stack); docker-compose up -d
 	$(MAKE) stack-post-up
 
 stack-down: stack-pre-down
 	$(info_v) "DOWN" $(stack); docker-compose down
 	$(MAKE) stack-post-down
+endif
 
 stack-pre-up: stack-net-up docker-compose.yml
 
 stack-post-up:
-
-$(foreach net,$(networks),$(eval $(call stack-net,$(net))))
 
 stack-pre-down: docker-compose.yml
 
@@ -276,7 +286,9 @@ stack-net-up: $(foreach net,$(networks), stack-net-$(net)-up)
 
 stack-net-down: $(foreach net,$(networks), stack-net-$(net)-down)
 
-.PHONY: all-stack stack-pre-up stack-post-up stack-pre-down stack-post-down stack-net-up stack-net-down
+$(foreach net,$(networks),$(eval $(call stack-net,$(net))))
+
+.PHONY: all-stack stack-up stack-pre-up stack-post-up stack-pre-down stack-post-down stack-net-up stack-net-down
 endif
 #
 # END: stack
